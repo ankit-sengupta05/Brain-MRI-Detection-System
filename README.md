@@ -13,7 +13,7 @@ React/Vite frontend prototype for the supplied PyTorch benchmark.
 - Prediction/inference console with demo MRI state
 - Class-wise confusion matrix and error analysis
 - Responsive layout
-
+.
 ### Run
 npm install
 npm run dev
