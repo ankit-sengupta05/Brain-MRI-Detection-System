@@ -1,74 +1,712 @@
-import React,{useState} from "react";
-import {createRoot} from "react-dom/client";
-import {LineChart,Line,BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,Legend,ResponsiveContainer} from "recharts";
-import {Brain,LayoutDashboard,Activity,GitCompareArrows,ScanLine,Layers3,Settings2,ChevronRight,Upload,Play,Search,Download,ShieldCheck,Sparkles,Target,CheckCircle2,Clock3,ArrowUpRight} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  Activity,
+  AlertCircle,
+  Brain,
+  CheckCircle2,
+  Download,
+  FileImage,
+  GitCompareArrows,
+  LayoutDashboard,
+  LoaderCircle,
+  ScanLine,
+  ShieldAlert,
+  Upload,
+} from "lucide-react";
 import "./styles.css";
 
-const M={
-"Custom CNN":{acc:.8988,p:.9081,r:.8988,f1:.8961,conf:.8529,unc:.1471,tl:.5041,vl:.6292,ta:.9387,c:"#a78bfa",
-cm:[[286,72,35,7],[2,363,20,15],[0,2,398,0],[0,9,0,391]],tr:[[1286,109,1,4],[35,1261,40,64],[5,14,1368,13],[4,48,6,1342]]},
-"ResNet18":{acc:.8581,p:.8614,r:.8581,f1:.8548,conf:.7822,unc:.2178,tl:.5944,vl:.6952,ta:.8912,c:"#22d3ee",
-cm:[[291,58,34,17],[22,304,47,27],[0,5,394,1],[3,13,0,384]],tr:[[1220,157,9,14],[110,1133,51,106],[13,37,1329,21],[8,70,13,1309]]},
-"MobileNetV3":{acc:.8462,p:.8572,r:.8462,f1:.8410,conf:.8108,unc:.1892,tl:.5915,vl:.7088,ta:.8934,c:"#fb7185",
-cm:[[254,91,42,13],[11,314,46,29],[0,5,395,0],[0,8,1,391]],tr:[[1197,184,6,13],[103,1144,44,109],[13,26,1337,24],[12,58,5,1325]]}};
-const C=["Glioma","Meningioma","No Tumor","Pituitary"], E=Array.from({length:50},(_,i)=>i+1);
-const curve=(name,type)=>E.map(e=>{const x=M[name],t=e/50,w=Math.sin(e*1.6)*.004;return type==="a"?{epoch:e,Train:Math.min(.99,x.ta-(x.ta-.65)*(1-t)**1.6+w),Test:x.acc-(x.acc-.62)*(1-Math.min(1,t*2.2))+w}:{epoch:e,Train:x.tl+(1-t)*.35+w,Test:x.vl+(1-t)*.55+Math.sin(e*.9)*.018}});
-const tip={contentStyle:{background:"#101528",border:"1px solid #2b3855",borderRadius:12,color:"#eef2ff"}};
+const MODEL_COLORS = {
+  "Custom CNN": "#a78bfa",
+  ResNet18: "#22d3ee",
+  MobileNetV3: "#fb7185",
+};
+const CLASS_LABELS = {
+  glioma: "Glioma",
+  meningioma: "Meningioma",
+  notumor: "No Tumor",
+  pituitary: "Pituitary",
+};
+const NAV_ITEMS = [
+  ["Overview", LayoutDashboard],
+  ["Model Comparison", GitCompareArrows],
+  ["Training & Validation", Activity],
+  ["Predictions", ScanLine],
+  ["Confusion Matrix", Brain],
+];
+const tooltipStyle = {
+  contentStyle: {
+    background: "#101528",
+    border: "1px solid #2b3855",
+    borderRadius: 12,
+    color: "#eef2ff",
+  },
+};
 
-function Pill({model,setModel}){return <div className="pills">{Object.keys(M).map(n=><button className={n===model?"sel":""} onClick={()=>setModel(n)} key={n}><i style={{background:M[n].c}}/>{n}</button>)}</div>}
-function Stat({l,v,s}){return <div className="stat"><span>{l}</span><b>{v}</b>{s&&<small>{s}</small>}</div>}
-function Panel({k,t,children}){return <section className="panel"><div className="ph"><div><label>{k}</label><h3>{t}</h3></div><span>•••</span></div>{children}</section>}
-
-function Overview({model,setModel,setPage}){
- return <><div className="head"><div><label>EXECUTIVE SUMMARY</label><h2>Performance at a glance</h2></div><Pill model={model} setModel={setModel}/></div>
- <div className="stats"><Stat l="BEST TEST ACCURACY" v="89.88%" s="Custom CNN · +4.07 pp vs ResNet18"/><Stat l="BEST MACRO F1" v="89.61%" s="Balanced across all tumor classes"/><Stat l="MEAN CONFIDENCE" v="85.29%" s="Custom CNN · uncertainty 14.71%"/><Stat l="TRAIN / TEST GAP" v="4.99 pp" s="Accuracy gap · generalization"/></div>
- <div className="two"><Panel k="HELD-OUT TEST" t="Model leaderboard"><div className="leaders">{Object.entries(M).sort((a,b)=>b[1].acc-a[1].acc).map(([n,x],i)=><div className="leader" key={n}><em>0{i+1}</em><div><b><i style={{background:x.c}}/>{n}</b><small>Test loss {x.vl.toFixed(4)}</small></div><strong>{(x.acc*100).toFixed(2)}%</strong><strong>F1 {(x.f1*100).toFixed(2)}%</strong></div>)}</div></Panel>
- <Panel k="MODEL RELIABILITY" t="Confidence vs uncertainty"><ResponsiveContainer width="100%" height={260}><BarChart data={Object.entries(M).map(([name,x])=>({name,Confidence:x.conf*100,Uncertainty:x.unc*100}))} layout="vertical"><CartesianGrid stroke="#26314a" strokeDasharray="3 3"/><XAxis type="number" domain={[0,100]} tick={{fill:"#7f8ba5",fontSize:10}}/><YAxis type="category" dataKey="name" width={105} tick={{fill:"#aeb8cc",fontSize:10}}/><Tooltip {...tip} formatter={v=>`${Number(v).toFixed(1)}%`}/><Legend/><Bar dataKey="Confidence" fill="#8b5cf6"/><Bar dataKey="Uncertainty" fill="#334155"/></BarChart></ResponsiveContainer></Panel></div>
- <div className="two"><Panel k="MODEL INSIGHT" t="Why Custom CNN leads"><div className="insight"><div className="icon"><ArrowUpRight/></div><div><b>Highest overall test performance</b><p>Custom CNN reaches <strong>89.88% accuracy</strong> and <strong>89.61% macro F1</strong>, while maintaining 85.29% mean confidence.</p><div className="chips"><span>+4.07 pp accuracy</span><span>+4.13 pp F1</span><span>14.71% uncertainty</span></div></div></div></Panel>
- <Panel k="EXPERIMENT" t="Benchmark protocol"><ul className="protocol"><li><Clock3/>50 epochs · same epoch budget</li><li><Layers3/>Same data split across models</li><li><Activity/>Same optimizer & schedule</li><li><ShieldCheck/>Transfer-learning backbones frozen</li></ul></Panel></div></>
+function percentage(value) {
+  return `${(value * 100).toFixed(2)}%`;
 }
 
-function Comparison({model,setModel}){
- const rows=Object.entries(M); return <><div className="head"><div><label>HEAD-TO-HEAD</label><h2>Three-model comparison</h2></div><Pill model={model} setModel={setModel}/></div>
- <Panel k="TEST SET" t="Benchmark scorecard"><div className="table"><table><thead><tr><th>MODEL</th><th>ACCURACY</th><th>PRECISION</th><th>RECALL</th><th>F1</th><th>CONFIDENCE</th><th>UNCERTAINTY</th></tr></thead><tbody>{rows.map(([n,x])=><tr className={n===model?"chosen":""} key={n}><td><i style={{background:x.c}}/>{n}</td><td><b>{(x.acc*100).toFixed(2)}%</b></td><td>{(x.p*100).toFixed(2)}%</td><td>{(x.r*100).toFixed(2)}%</td><td>{(x.f1*100).toFixed(2)}%</td><td>{(x.conf*100).toFixed(2)}%</td><td>{(x.unc*100).toFixed(2)}%</td></tr>)}</tbody></table></div></Panel>
- <div className="two"><Panel k="TEST ACCURACY" t="Accuracy ranking"><ResponsiveContainer width="100%" height={300}><BarChart data={rows.map(([name,x])=>({name,Accuracy:x.acc*100}))}><CartesianGrid stroke="#26314a" strokeDasharray="3 3"/><XAxis dataKey="name" tick={{fill:"#9ca8be",fontSize:10}}/><YAxis domain={[75,92]} tick={{fill:"#7f8ba5"}}/><Tooltip {...tip} formatter={v=>`${Number(v).toFixed(2)}%`}/><Bar dataKey="Accuracy" fill="#a78bfa" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer></Panel>
- <Panel k="MACRO AVERAGE" t="Precision / Recall / F1"><ResponsiveContainer width="100%" height={300}><BarChart data={rows.map(([name,x])=>({name,Precision:x.p*100,Recall:x.r*100,F1:x.f1*100}))}><CartesianGrid stroke="#26314a" strokeDasharray="3 3"/><XAxis dataKey="name" tick={{fill:"#9ca8be",fontSize:10}}/><YAxis domain={[80,93]} tick={{fill:"#7f8ba5"}}/><Tooltip {...tip} formatter={v=>`${Number(v).toFixed(2)}%`}/><Legend/><Bar dataKey="Precision" fill="#22d3ee"/><Bar dataKey="Recall" fill="#a78bfa"/><Bar dataKey="F1" fill="#fb7185"/></BarChart></ResponsiveContainer></Panel></div></>
+function downloadJson(data, fileName) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json",
+  });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
-function Training({model,setModel}){
- const x=M[model],loss=curve(model,"l"),acc=curve(model,"a");
- return <><div className="head"><div><label>LEARNING DYNAMICS</label><h2>Training & validation telemetry</h2></div><Pill model={model} setModel={setModel}/></div>
- <div className="stats"><Stat l="TRAIN LOSS" v={x.tl.toFixed(4)}/><Stat l="TEST LOSS" v={x.vl.toFixed(4)}/><Stat l="TRAIN ACCURACY" v={(x.ta*100).toFixed(2)+"%"}/><Stat l="TEST ACCURACY" v={(x.acc*100).toFixed(2)+"%"}/></div>
- <div className="two"><Panel k="CROSS-ENTROPY · 50 EPOCHS" t="Loss curve"><ResponsiveContainer width="100%" height={350}><LineChart data={loss}><CartesianGrid stroke="#26314a" strokeDasharray="3 3"/><XAxis dataKey="epoch" tick={{fill:"#7f8ba5"}}/><YAxis tick={{fill:"#7f8ba5"}}/><Tooltip {...tip}/><Legend/><Line dataKey="Train" stroke="#a78bfa" dot={false} strokeWidth={2}/><Line dataKey="Test" stroke="#fb7185" dot={false} strokeWidth={2}/></LineChart></ResponsiveContainer></Panel>
- <Panel k="MODEL ACCURACY" t="Accuracy curve"><ResponsiveContainer width="100%" height={350}><LineChart data={acc}><CartesianGrid stroke="#26314a" strokeDasharray="3 3"/><XAxis dataKey="epoch" tick={{fill:"#7f8ba5"}}/><YAxis domain={[.55,1]} tickFormatter={v=>Math.round(v*100)+"%"} tick={{fill:"#7f8ba5"}}/><Tooltip {...tip} formatter={v=>(v*100).toFixed(2)+"%"}/><Legend/><Line dataKey="Train" stroke="#22d3ee" dot={false} strokeWidth={2}/><Line dataKey="Test" stroke="#fb7185" dot={false} strokeWidth={2}/></LineChart></ResponsiveContainer></Panel></div>
- <Panel k="CLASS-BALANCED METRICS" t="Macro precision, recall & F1"><MetricChart model={model}/></Panel></>
-}
-function MetricChart({model}){const x=M[model],d=E.map(e=>{const t=Math.min(1,e/24),w=Math.sin(e)*.004;return{epoch:e,Precision:Math.min(.99,.66+(x.p-.66)*t+w),Recall:Math.min(.98,.62+(x.r-.62)*t+w),F1:Math.min(.98,.60+(x.f1-.60)*t+w)}});return <ResponsiveContainer width="100%" height={320}><LineChart data={d}><CartesianGrid stroke="#26314a" strokeDasharray="3 3"/><XAxis dataKey="epoch" tick={{fill:"#7f8ba5"}}/><YAxis domain={[.55,1]} tickFormatter={v=>Math.round(v*100)+"%"} tick={{fill:"#7f8ba5"}}/><Tooltip {...tip} formatter={v=>(v*100).toFixed(2)+"%"}/><Legend/><Line dataKey="Precision" stroke="#22d3ee" dot={false} strokeWidth={2}/><Line dataKey="Recall" stroke="#a78bfa" dot={false} strokeWidth={2}/><Line dataKey="F1" stroke="#fb7185" dot={false} strokeWidth={2}/></LineChart></ResponsiveContainer>}
-
-function Predictions({model,setModel}){
- const x=M[model], vals=[.89,.07,.03,.01]; return <><div className="head"><div><label>INFERENCE CONSOLE</label><h2>Model predictions</h2></div><Pill model={model} setModel={setModel}/></div>
- <div className="predGrid"><div className="upload"><div className="drop"><ScanLine size={34}/><b>Upload MRI scan</b><small>PNG / JPG · axial brain slice</small><button><Upload size={15}/>Choose image</button></div><div className="demo"><div className="fakeMRI"><div/></div><div><b>Sample axial MRI</b><small>Demo scan · ready for inference</small></div></div></div>
- <div className="result"><div className="resultHead"><div><label>CURRENT MODEL</label><h3>{model}</h3></div><span className="live">INFERENCE READY</span></div><div className="diagnosis"><div className="ring"><b>89%</b><small>confidence</small></div><div><label>PREDICTED CLASS</label><h2>Glioma</h2><p>Highest class probability from the selected architecture.</p></div></div>{C.map((c,i)=><div className="prob" key={c}><span>{c}</span><div><i style={{width:(vals[i]*100)+"%"}}/></div><b>{(vals[i]*100).toFixed(1)}%</b></div>)}<button className="run"><Play size={15} fill="currentColor"/>Run inference</button></div></div>
- <Panel k="INFERENCE HISTORY" t="Recent prediction sessions">{["Case #1042","Case #1088","Case #1117","Case #1146","Case #1203"].map((c,i)=><div className="session" key={c}><span><ScanLine size={15}/></span><b>{c}<small>Today · {model}</small></b><em>{C[i%4]}</em><strong>{86+i}.1%</strong><small className="green">✓ reviewed</small></div>)}</Panel></>
+function Panel({ eyebrow, title, children }) {
+  return (
+    <section className="panel">
+      <div className="ph">
+        <div>
+          <label>{eyebrow}</label>
+          <h3>{title}</h3>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
 }
 
-function Confusion({model,setModel}){
- const x=M[model],max=Math.max(...x.cm.flat());return <><div className="head"><div><label>ERROR ANALYSIS</label><h2>Confusion matrix</h2></div><Pill model={model} setModel={setModel}/></div><div className="two"><Panel k="ROWS = TRUE · COLUMNS = PREDICTED" t={model+" · Test set"}><div className="matrixWrap"><div className="matrixLabels top">{C.map(c=><span key={c}>{c}</span>)}</div><div className="matrixBody"><div className="matrixLabels side">{C.map(c=><span key={c}>{c}</span>)}</div><div className="matrix">{x.cm.flatMap((r,i)=>r.map((v,j)=><div className={i===j?"diag":""} style={{opacity:.2+.75*v/max}} key={i+"-"+j}><b>{v}</b></div>))}</div></div></div></Panel><Panel k="CLASS-WISE ERROR PROFILE" t="Where the model misses"><div>{C.map((c,i)=>{const row=x.cm[i],tot=row.reduce((a,b)=>a+b,0),rec=row[i]/tot;const top=row.map((v,j)=>({v,j})).filter(z=>z.j!==i).sort((a,b)=>b.v-a.v)[0];return <div className="error"><div><b>{c}</b><span>{(rec*100).toFixed(1)}% recall</span></div><div className="eb"><i style={{width:rec*100+"%"}}/></div><small>{tot-row[i]} errors · mostly confused with <b>{C[top.j]}</b> ({top.v})</small></div>})}</div></Panel></div></>
+function Stat({ label, value, detail }) {
+  return (
+    <div className="stat">
+      <span>{label}</span>
+      <b>{value}</b>
+      {detail && <small>{detail}</small>}
+    </div>
+  );
 }
-function Settings(){return <div className="settingsGrid"><Panel k="READ ONLY" t="Experiment configuration"><div className="settings">{[["Epoch budget","50"],["Data split","Train / Validation / Test"],["Optimizer","Adam"],["Transfer learning","Frozen backbones"],["Classes","4"],["Framework","PyTorch"]].map(a=><div><span>{a[0]}</span><b>{a[1]}</b></div>)}</div></Panel><Panel k="REPRODUCIBILITY" t="Evaluation policy"><div className="policy"><CheckCircle2/><div><b>Comparable benchmark</b><p>All three architectures use identical experimental conditions.</p></div></div><div className="policy"><ShieldCheck/><div><b>Confidence-aware output</b><p>Prediction confidence and uncertainty are surfaced with the class.</p></div></div></Panel></div>}
 
-function App(){
- const [page,setPage]=useState("Overview"),[model,setModel]=useState("Custom CNN");
- const nav=[["Overview",LayoutDashboard],["Model Comparison",GitCompareArrows],["Training & Validation",Activity],["Predictions",ScanLine],["Confusion Matrix",Layers3]];
- return <div className="app"><aside><div className="brand"><div><Brain size={22}/></div><b>NEURO<span>VISION</span><small>AI LAB / MRI</small></b></div><label className="sl">WORKSPACE</label>{nav.map(([n,I])=><button className={"nav "+(page===n?"active":"")} onClick={()=>setPage(n)} key={n}><I size={17}/><span>{n}</span>{page===n&&<ChevronRight size={14}/>}</button>)}<label className="sl">SYSTEM</label><button className="nav" onClick={()=>setPage("Settings")}><Settings2 size={17}/><span>Experiment Settings</span></button><div className="bottom"><span>● Benchmark ready</span><small>v1.4.2 · PyTorch</small></div></aside>
- <main><header><div><label>RESEARCH / BRAIN MRI / BENCHMARK</label><h1>{page}</h1></div><div className="actions"><div className="search"><Search size={15}/><input placeholder="Search models, metrics..."/></div><button><Download size={15}/> Export</button></div></header>
- <div className="hero"><div><div className="eyebrow"><Sparkles size={13}/> DEEP LEARNING DIAGNOSTICS</div><h2>Brain MRI Tumor<br/><em>Classification</em></h2><p>Three architectures. One dataset. Identical training conditions.<br/>Compare performance, error patterns and prediction confidence.</p><div className="tags"><span>✓ 50 epochs complete</span><span>◉ Held-out test set</span><span>◇ 4 classes</span></div></div><div className="orb"><div className="r r1"/><div className="r r2"/><div className="core"><Brain size={72}/><small>MRI<br/>AI</small></div></div></div>
- {page==="Overview"&&<Overview model={model} setModel={setModel} setPage={setPage}/>}
- {page==="Model Comparison"&&<Comparison model={model} setModel={setModel}/>}
- {page==="Training & Validation"&&<Training model={model} setModel={setModel}/>}
- {page==="Predictions"&&<Predictions model={model} setModel={setModel}/>}
- {page==="Confusion Matrix"&&<Confusion model={model} setModel={setModel}/>}
- {page==="Settings"&&<Settings/>}
- </main></div>
+function ModelPicker({ models, selected, onSelect }) {
+  return (
+    <div className="pills" role="group" aria-label="Select model">
+      {models.map((model) => (
+        <button
+          className={selected === model.name ? "sel" : ""}
+          key={model.name}
+          onClick={() => onSelect(model.name)}
+          type="button"
+        >
+          <i style={{ background: MODEL_COLORS[model.name] }} />
+          {model.name}
+        </button>
+      ))}
+    </div>
+  );
 }
-createRoot(document.getElementById("root")).render(<App/>);
+
+function PageHeading({ eyebrow, title, models, selected, onSelect }) {
+  return (
+    <div className="head">
+      <div>
+        <label>{eyebrow}</label>
+        <h2>{title}</h2>
+      </div>
+      {models.length > 0 && (
+        <ModelPicker models={models} selected={selected} onSelect={onSelect} />
+      )}
+    </div>
+  );
+}
+
+function ClassReport({ model }) {
+  return (
+    <div className="class-report">
+      <div className="report-row report-header">
+        <span>CLASS</span><span>PRECISION</span><span>RECALL</span>
+        <span>F1</span><span>SUPPORT</span>
+      </div>
+      {Object.entries(model.test_report.classes).map(([name, metrics]) => (
+        <div className="report-row" key={name}>
+          <b>{CLASS_LABELS[name] || name}</b>
+          <span>{percentage(metrics.precision)}</span>
+          <span>{percentage(metrics.recall)}</span>
+          <span>{percentage(metrics.f1)}</span>
+          <span>{metrics.support}</span>
+        </div>
+      ))}
+      <div className="report-summary">
+        Macro average F1: <b>{percentage(model.test_report.macro_f1)}</b>
+        <span>{model.test_report.support} held-out test images</span>
+      </div>
+    </div>
+  );
+}
+
+function Overview({ models, selected, onSelect, report }) {
+  const bestModel = [...models].sort(
+    (first, second) =>
+      second.test_report.accuracy - first.test_report.accuracy,
+  )[0];
+  return (
+    <>
+      <PageHeading
+        eyebrow="EXECUTIVE SUMMARY"
+        title="Performance at a glance"
+        models={models}
+        selected={selected}
+        onSelect={onSelect}
+      />
+      <div className="stats">
+        <Stat
+          label="BEST TEST ACCURACY"
+          value={percentage(bestModel.test_report.accuracy)}
+          detail={`${bestModel.name} · held-out test set`}
+        />
+        <Stat
+          label="BEST MACRO F1"
+          value={percentage(
+            Math.max(...models.map((model) => model.test_report.macro_f1)),
+          )}
+          detail="Highest model score in this run"
+        />
+        <Stat
+          label="TRAINING RUN"
+          value={`${report.epochs} epochs`}
+          detail={`Run ${report.run_id}`}
+        />
+        <Stat
+          label="INFERENCE DEVICE"
+          value={report.device.toUpperCase()}
+          detail="Loaded trained checkpoints"
+        />
+      </div>
+      <div className="two">
+        <Panel eyebrow="HELD-OUT TEST" title="Model leaderboard">
+          <div className="leaders">
+            {[...models]
+              .sort(
+                (first, second) =>
+                  second.test_report.accuracy - first.test_report.accuracy,
+              )
+              .map((model, index) => (
+                <div className="leader" key={model.name}>
+                  <em>0{index + 1}</em>
+                  <div>
+                    <b>
+                      <i style={{ background: MODEL_COLORS[model.name] }} />
+                      {model.name}
+                    </b>
+                    <small>{model.test_report.support} test images</small>
+                  </div>
+                  <strong>{percentage(model.test_report.accuracy)}</strong>
+                  <strong>F1 {percentage(model.test_report.macro_f1)}</strong>
+                </div>
+              ))}
+          </div>
+        </Panel>
+        <Panel eyebrow="MODEL RELIABILITY" title="Test confidence and uncertainty">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart
+              data={models.map((model) => ({
+                name: model.name,
+                Confidence: model.history.test_mean_confidence.at(-1) * 100,
+                Uncertainty: model.history.test_uncertainty.at(-1) * 100,
+              }))}
+              layout="vertical"
+            >
+              <CartesianGrid stroke="#26314a" strokeDasharray="3 3" />
+              <XAxis type="number" domain={[0, 100]} />
+              <YAxis type="category" dataKey="name" width={105} />
+              <Tooltip {...tooltipStyle} formatter={(value) => `${Number(value).toFixed(1)}%`} />
+              <Legend />
+              <Bar dataKey="Confidence" fill="#8b5cf6" />
+              <Bar dataKey="Uncertainty" fill="#334155" />
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+      </div>
+      <div className="two">
+        <Panel eyebrow="BENCHMARK REPORT" title={`${selected} · class metrics`}>
+          <ClassReport model={models.find((model) => model.name === selected)} />
+        </Panel>
+        <Panel eyebrow="RESEARCH USE" title="How to interpret these results">
+          <div className="insight">
+            <div className="icon"><ShieldAlert /></div>
+            <div>
+              <b>Not for clinical decisions</b>
+              <p>
+                This research demo classifies images into the model&apos;s
+                training labels. It is not a diagnosis, and confidence is not a
+                measure of clinical certainty.
+              </p>
+              <div className="chips">
+                <span>4 trained classes</span>
+                <span>Saved test reports</span>
+                <span>{report.run_id}</span>
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </>
+  );
+}
+
+function Comparison({ models, selected, onSelect }) {
+  return (
+    <>
+      <PageHeading
+        eyebrow="HEAD-TO-HEAD"
+        title="Three-model comparison"
+        models={models}
+        selected={selected}
+        onSelect={onSelect}
+      />
+      <Panel eyebrow="SAVED TEST REPORT" title="Classification metrics by model">
+        <div className="table">
+          <table>
+            <thead>
+              <tr>
+                <th>MODEL</th><th>ACCURACY</th><th>PRECISION</th>
+                <th>RECALL</th><th>MACRO F1</th><th>TEST IMAGES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {models.map((model) => (
+                <tr
+                  className={selected === model.name ? "chosen" : ""}
+                  key={model.name}
+                >
+                  <td>
+                    <i style={{ background: MODEL_COLORS[model.name] }} />
+                    {model.name}
+                  </td>
+                  <td>{percentage(model.test_report.accuracy)}</td>
+                  <td>{percentage(model.test_report.macro_precision)}</td>
+                  <td>{percentage(model.test_report.macro_recall)}</td>
+                  <td>{percentage(model.test_report.macro_f1)}</td>
+                  <td>{model.test_report.support}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+      <div className="two">
+        <Panel eyebrow="HELD-OUT TEST" title="Accuracy comparison">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              data={models.map((model) => ({
+                name: model.name,
+                Accuracy: model.test_report.accuracy * 100,
+              }))}
+            >
+              <CartesianGrid stroke="#26314a" strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis domain={[0, 100]} />
+              <Tooltip {...tooltipStyle} formatter={(value) => `${Number(value).toFixed(2)}%`} />
+              <Bar dataKey="Accuracy" fill="#a78bfa" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+        <Panel eyebrow="SELECTED MODEL" title={`${selected} · classification report`}>
+          <ClassReport model={models.find((model) => model.name === selected)} />
+        </Panel>
+      </div>
+    </>
+  );
+}
+
+function Training({ models, selected, onSelect }) {
+  const model = models.find((item) => item.name === selected);
+  const loss = model.history.train_loss.map((train, index) => ({
+    epoch: index + 1,
+    Train: train,
+    Test: model.history.test_loss[index],
+  }));
+  const accuracy = model.history.train_accuracy.map((train, index) => ({
+    epoch: index + 1,
+    Train: train * 100,
+    Test: model.history.test_accuracy[index] * 100,
+  }));
+  return (
+    <>
+      <PageHeading
+        eyebrow="LEARNING DYNAMICS"
+        title="Training & validation telemetry"
+        models={models}
+        selected={selected}
+        onSelect={onSelect}
+      />
+      <div className="stats">
+        <Stat label="TRAIN LOSS" value={model.history.train_loss.at(-1).toFixed(4)} />
+        <Stat label="TEST LOSS" value={model.history.test_loss.at(-1).toFixed(4)} />
+        <Stat label="TRAIN ACCURACY" value={percentage(model.history.train_accuracy.at(-1))} />
+        <Stat label="TEST ACCURACY" value={percentage(model.history.test_accuracy.at(-1))} />
+      </div>
+      <div className="two">
+        <Panel eyebrow={`${model.epochs} EPOCHS`} title="Training and test loss">
+          <ResponsiveContainer width="100%" height={330}>
+            <LineChart data={loss}>
+              <CartesianGrid stroke="#26314a" strokeDasharray="3 3" />
+              <XAxis dataKey="epoch" /><YAxis />
+              <Tooltip {...tooltipStyle} /><Legend />
+              <Line dataKey="Train" stroke="#a78bfa" dot={false} strokeWidth={2} />
+              <Line dataKey="Test" stroke="#fb7185" dot={false} strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </Panel>
+        <Panel eyebrow="ACCURACY · %" title="Training and test accuracy">
+          <ResponsiveContainer width="100%" height={330}>
+            <LineChart data={accuracy}>
+              <CartesianGrid stroke="#26314a" strokeDasharray="3 3" />
+              <XAxis dataKey="epoch" /><YAxis domain={[0, 100]} />
+              <Tooltip {...tooltipStyle} formatter={(value) => `${Number(value).toFixed(2)}%`} />
+              <Legend />
+              <Line dataKey="Train" stroke="#22d3ee" dot={false} strokeWidth={2} />
+              <Line dataKey="Test" stroke="#fb7185" dot={false} strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </Panel>
+      </div>
+    </>
+  );
+}
+
+function Confusion({ models, selected, onSelect }) {
+  const model = models.find((item) => item.name === selected);
+  const matrix = model.confusion_matrix;
+  const max = Math.max(...matrix.flat());
+  const classes = Object.keys(model.test_report.classes);
+  return (
+    <>
+      <PageHeading
+        eyebrow="ERROR ANALYSIS"
+        title="Held-out test classification report"
+        models={models}
+        selected={selected}
+        onSelect={onSelect}
+      />
+      <div className="two">
+        <Panel eyebrow="ROWS = TRUE · COLUMNS = PREDICTED" title={`${selected} · confusion matrix`}>
+          <div className="matrixWrap">
+            <div className="matrixLabels top">
+              {classes.map((name) => <span key={name}>{CLASS_LABELS[name] || name}</span>)}
+            </div>
+            <div className="matrixBody">
+              <div className="matrixLabels side">
+                {classes.map((name) => <span key={name}>{CLASS_LABELS[name] || name}</span>)}
+              </div>
+              <div className="matrix">
+                {matrix.flatMap((row, rowIndex) =>
+                  row.map((value, columnIndex) => (
+                    <div
+                      className={rowIndex === columnIndex ? "diag" : ""}
+                      key={`${rowIndex}-${columnIndex}`}
+                      style={{ opacity: 0.2 + 0.75 * value / max }}
+                    >
+                      <b>{value}</b>
+                    </div>
+                  )),
+                )}
+              </div>
+            </div>
+          </div>
+        </Panel>
+        <Panel eyebrow="TEST SET" title="Per-class report">
+          <ClassReport model={model} />
+          <p className="report-note">
+            Matrix rows are true dataset labels; columns are model predictions.
+          </p>
+        </Panel>
+      </div>
+    </>
+  );
+}
+
+function Predictions({ models, selected, onSelect, report }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState("");
+  const [prediction, setPrediction] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const selectedModel = models.find((model) => model.name === selected);
+
+  useEffect(() => {
+    if (!file) {
+      setPreview("");
+      return undefined;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  function chooseFile(nextFile) {
+    setError("");
+    setPrediction(null);
+    if (!nextFile) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(nextFile.type)) {
+      setFile(null);
+      setError("Choose a JPEG, PNG, or WebP image.");
+      return;
+    }
+    if (nextFile.size > 10 * 1024 * 1024) {
+      setFile(null);
+      setError("Image must be 10 MB or smaller.");
+      return;
+    }
+    setFile(nextFile);
+  }
+
+  async function runPrediction(event) {
+    event.preventDefault();
+    if (!file) {
+      setError("Choose an image before running inference.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setPrediction(null);
+    const formData = new FormData();
+    formData.append("model_name", selected);
+    formData.append("image", file);
+    try {
+      const response = await fetch("/api/predict", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.detail || "The prediction request failed.");
+      }
+      setPrediction(result);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to reach the prediction API.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="INFERENCE CONSOLE"
+        title="Upload an image for prediction"
+        models={models}
+        selected={selected}
+        onSelect={(name) => {
+          onSelect(name);
+          setPrediction(null);
+        }}
+      />
+      <div className="predGrid">
+        <form className="upload" onSubmit={runPrediction}>
+          <label className="drop" htmlFor="mri-file">
+            {preview ? (
+              <img className="upload-preview" src={preview} alt="Selected MRI scan preview" />
+            ) : (
+              <FileImage size={36} />
+            )}
+            <b>{file ? file.name : "Choose a brain MRI image"}</b>
+            <small>JPEG / PNG / WebP · maximum 10 MB</small>
+            <span className="choose-button"><Upload size={15} /> Browse files</span>
+          </label>
+          <input
+            accept="image/jpeg,image/png,image/webp"
+            className="file-input"
+            id="mri-file"
+            onChange={(event) => chooseFile(event.target.files?.[0])}
+            type="file"
+          />
+          {error && <div className="error-message"><AlertCircle size={15} />{error}</div>}
+          <button className="run" disabled={busy || !file} type="submit">
+            {busy ? <LoaderCircle className="spin" size={15} /> : <ScanLine size={15} />}
+            {busy ? "Running model…" : `Run ${selected} inference`}
+          </button>
+          <small className="privacy-note">Image is processed locally and is not saved by the API.</small>
+        </form>
+        <div className="result">
+          <div className="resultHead">
+            <div><label>SELECTED CHECKPOINT</label><h3>{selectedModel.name}</h3></div>
+            <span className="live">RUN {report.run_id}</span>
+          </div>
+          {prediction ? (
+            <>
+              <div className="diagnosis">
+                <div className="ring">
+                  <b>{Math.round(prediction.confidence * 100)}%</b>
+                  <small>confidence</small>
+                </div>
+                <div>
+                  <label>PREDICTED TRAINING LABEL</label>
+                  <h2>{CLASS_LABELS[prediction.predicted_class] || prediction.predicted_class}</h2>
+                  <p>{prediction.filename}</p>
+                </div>
+              </div>
+              <div className="probability-title">Class probabilities</div>
+              {prediction.probabilities.map((item) => (
+                <div className="prob" key={item.class_name}>
+                  <span>{CLASS_LABELS[item.class_name] || item.class_name}</span>
+                  <div><i style={{ width: `${item.probability * 100}%` }} /></div>
+                  <b>{percentage(item.probability)}</b>
+                </div>
+              ))}
+              <div className="prediction-disclaimer">
+                <ShieldAlert size={16} />
+                <span>{prediction.disclaimer}</span>
+              </div>
+              <button
+                className="report-download"
+                onClick={() => downloadJson(prediction, "brain-mri-prediction-report.json")}
+                type="button"
+              >
+                <Download size={15} /> Download prediction report
+              </button>
+            </>
+          ) : (
+            <div className="empty-result">
+              <ScanLine size={30} />
+              <b>Prediction report will appear here</b>
+              <p>Choose a scan and run one of the three trained models.</p>
+              <small>Benchmark test accuracy: {percentage(selectedModel.test_report.accuracy)}</small>
+            </div>
+          )}
+        </div>
+      </div>
+      {prediction && (
+        <div className="two prediction-report">
+          <Panel eyebrow="MODEL EVALUATION" title={`${selected} · saved test-set report`}>
+            <ClassReport model={selectedModel} />
+          </Panel>
+          <Panel eyebrow="RUN DETAILS" title="Inference metadata">
+            <div className="settings">
+              <div><span>Checkpoint run</span><b>{prediction.run_id}</b></div>
+              <div><span>Selected model</span><b>{prediction.model}</b></div>
+              <div><span>Top-class uncertainty</span><b>{percentage(prediction.uncertainty)}</b></div>
+              <div><span>Test-set support</span><b>{prediction.benchmark.support} images</b></div>
+            </div>
+          </Panel>
+        </div>
+      )}
+    </>
+  );
+}
+
+function App() {
+  const [report, setReport] = useState(null);
+  const [page, setPage] = useState("Overview");
+  const [selected, setSelected] = useState("Custom CNN");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    let attempts = 0;
+    let timer;
+    async function loadReport() {
+      try {
+        const response = await fetch("/api/models");
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not load model reports.");
+        if (active) {
+          setReport(body);
+          setSelected(body.models[0].name);
+        }
+      } catch (requestError) {
+        if (!active) return;
+        if (attempts < 30) {
+          attempts += 1;
+          timer = window.setTimeout(loadReport, 1000);
+        } else {
+          setError(requestError.message || "Could not connect to the backend.");
+        }
+      }
+    }
+    loadReport();
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  const models = report?.models || [];
+  const selectedModel = models.find((model) => model.name === selected);
+
+  if (error) {
+    return (
+      <div className="startup-error">
+        <AlertCircle size={28} />
+        <h1>Brain MRI dashboard could not connect</h1>
+        <p>{error}</p>
+        <p>Start the local backend and refresh this page. The launcher is <code>start_dashboard.bat</code>.</p>
+      </div>
+    );
+  }
+  if (!report || !selectedModel) {
+    return <div className="loading"><LoaderCircle className="spin" />Loading trained models and reports…</div>;
+  }
+
+  return (
+    <div className="app">
+      <aside>
+        <div className="brand"><div><Brain size={22} /></div><b>NEURO<span>VISION</span><small>RESEARCH / MRI</small></b></div>
+        <label className="sl">WORKSPACE</label>
+        {NAV_ITEMS.map(([name, Icon]) => (
+          <button
+            className={`nav ${page === name ? "active" : ""}`}
+            key={name}
+            onClick={() => setPage(name)}
+            type="button"
+          >
+            <Icon size={17} /><span>{name}</span>
+          </button>
+        ))}
+        <button
+          className="nav export-nav"
+          onClick={() => downloadJson(report, `brain-mri-model-reports-${report.run_id}.json`)}
+          type="button"
+        >
+          <Download size={17} /><span>Download all reports</span>
+        </button>
+        <div className="bottom"><span><CheckCircle2 size={13} /> {models.length} models ready</span><small>Run {report.run_id}</small></div>
+      </aside>
+      <main>
+        <header>
+          <div><label>RESEARCH / BRAIN MRI / BENCHMARK</label><h1>{page}</h1></div>
+          <div className="header-status"><span className="status-dot" /> Backend connected</div>
+        </header>
+        <div className="hero">
+          <div>
+            <div className="eyebrow"><Activity size={13} /> TRAINED MODEL BENCHMARK</div>
+            <h2>Brain MRI Tumor<br /><em>Classification</em></h2>
+            <p>Explore the three trained models, their saved test-set reports, and local image inference.</p>
+            <div className="tags">
+              <span>✓ {report.epochs} epochs complete</span>
+              <span>◉ {report.class_names.length} classes</span>
+              <span>◇ Run {report.run_id}</span>
+            </div>
+          </div>
+          <div className="orb"><div className="r r1" /><div className="r r2" /><div className="core"><Brain size={54} /><small>MODEL<br />INFERENCE</small></div></div>
+        </div>
+        {page === "Overview" && <Overview models={models} selected={selected} onSelect={setSelected} report={report} />}
+        {page === "Model Comparison" && <Comparison models={models} selected={selected} onSelect={setSelected} />}
+        {page === "Training & Validation" && <Training models={models} selected={selected} onSelect={setSelected} />}
+        {page === "Predictions" && <Predictions models={models} selected={selected} onSelect={setSelected} report={report} />}
+        {page === "Confusion Matrix" && <Confusion models={models} selected={selected} onSelect={setSelected} />}
+        <p className="medical-disclaimer">
+          <ShieldAlert size={14} /> Research demonstration only — not a medical device or a substitute for professional medical evaluation.
+        </p>
+      </main>
+    </div>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);

@@ -126,6 +126,41 @@ prediction, confidence = predict_brain_mri(
 
 Displays the image with the predicted class and confidence, and returns `(predicted_class: str, confidence: float)`. Any of the three trained models can be selected by name as long as they're still loaded in `models_to_train`.
 
+## Local dashboard
+
+The React dashboard loads the three trained checkpoints in `saved_models/`, reads their saved per-epoch metrics and test-set confusion matrices, and exposes image inference through a local FastAPI service. The Predictions page accepts JPEG, PNG, and WebP images up to 10 MB. Uploaded images are processed in memory and are not saved by the API. Prediction reports include the selected model, predicted training label, all four class probabilities, the run identifier, and its held-out test report.
+
+The results are a research demonstration only. They are not a medical diagnosis or a substitute for evaluation by a qualified healthcare professional.
+
+### One-time setup
+
+- Install Node.js (including npm) and Python 3.10 or newer.
+- From the project directory, create/activate a Python environment and install the backend requirements:
+
+  ```powershell
+  py -3 -m venv .venv
+  .venv\Scripts\python.exe -m pip install -r requirements.txt
+  ```
+
+  `torch` and `torchvision` can be large downloads. If you need a CUDA-enabled PyTorch build, install the matching PyTorch packages for your CUDA version before installing the remaining requirements.
+- Install the frontend packages once with `npm install` (the launcher also does this when `node_modules/` is absent).
+
+### Start
+
+Double-click `start_dashboard.bat` or run it from the project directory. It checks the Python backend imports and installs `requirements.txt` if a dependency is missing, then starts the API at `http://127.0.0.1:8000`, starts the Vite frontend at `http://127.0.0.1:5173`, and opens the dashboard in your browser. The first install may take several minutes because PyTorch is a large package. Keep both terminal windows open.
+
+Running `npm run dev` alone starts only the frontend; it does not start the prediction API. Use `start_dashboard.bat` to start both services. Alternatively, start the backend separately with `.venv\Scripts\python.exe -m uvicorn backend.app:app --host 127.0.0.1 --port 8000` before running `npm run dev`.
+
+The API loads the latest complete run containing all three `*_best.pth` checkpoints and its `all_models_*_metrics.json` report; a missing or incompatible checkpoint is reported by the backend startup log rather than silently substituting a model.
+
+### Local API
+
+- `GET /api/health` — backend and loaded-model status.
+- `GET /api/models` — run metadata, epoch histories, confusion matrices, and per-class test reports for all models.
+- `POST /api/predict` — multipart fields `model_name` (`Custom CNN`, `ResNet18`, or `MobileNetV3`) and `image`.
+
+The browser dashboard proxies these routes to the local API. A prediction JSON report can be downloaded from the Predictions page, and all saved model reports can be downloaded from the sidebar.
+
 ## Notes & possible improvements
 
 - Only the final layer of ResNet18 and MobileNetV3 is fine-tuned (backbone frozen) — unfreezing the last few backbone blocks, or the whole network at a lower LR, is a likely way to close the gap with the from-scratch CNN.
